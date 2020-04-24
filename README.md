@@ -37,7 +37,7 @@ netty:
     如果是要写处理的业务类，可以继承本包中的AbstractChannelHandlerService，该类已经实现了部分功能，
     开发者只需要实现抽象方法execute()即可。
 例如：只实现execute方法
-  ```java
+```java
     import xxx.service.AbstractChannelHandlerService;
     import xxx.service.DeviceDataService;
     import io.netty.channel.ChannelHandlerContext;
@@ -118,52 +118,53 @@ netty:
 ```
 ### 编写netty解码器
 ```java
-import com.hope.common.constant.annotation.NotProguardClassName;
-import com.wyq.netty.annotation.NettyHandler;
-import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
-import org.springframework.stereotype.Component;
-
-import java.nio.ByteOrder;
-
-@Component
-@NettyHandler(name = "ExternalDeviceData", order = 1)
-public class ExternalDeviceDataDecoder extends LengthFieldBasedFrameDecoder {
-
-    public ExternalDeviceDataDecoder() {
-        this(ByteOrder.LITTLE_ENDIAN, Integer.MAX_VALUE, 0, 4, 0, 4, true);
+    import com.hope.common.constant.annotation.NotProguardClassName;
+    import com.wyq.netty.annotation.NettyHandler;
+    import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+    import org.springframework.stereotype.Component;
+    
+    import java.nio.ByteOrder;
+    
+    @Component
+    @NettyHandler(name = "ExternalDeviceData", order = 1)
+    public class ExternalDeviceDataDecoder extends LengthFieldBasedFrameDecoder {
+    
+        public ExternalDeviceDataDecoder() {
+            this(ByteOrder.LITTLE_ENDIAN, Integer.MAX_VALUE, 0, 4, 0, 4, true);
+        }
+    
+        public ExternalDeviceDataDecoder(ByteOrder byteOrder, int maxFrameLength, int lengthFieldOffset, int lengthFieldLength, int lengthAdjustment, int initialBytesToStrip, boolean failFast) {
+            super(byteOrder, maxFrameLength, lengthFieldOffset, lengthFieldLength, lengthAdjustment, initialBytesToStrip, failFast);
+        }
     }
-
-    public ExternalDeviceDataDecoder(ByteOrder byteOrder, int maxFrameLength, int lengthFieldOffset, int lengthFieldLength, int lengthAdjustment, int initialBytesToStrip, boolean failFast) {
-        super(byteOrder, maxFrameLength, lengthFieldOffset, lengthFieldLength, lengthAdjustment, initialBytesToStrip, failFast);
-    }
-}
 ```
 ### 编写netty编码器
 ```java
-import com.wyq.netty.annotation.NettyHandler;
-import io.netty.channel.ChannelHandler;
-import io.netty.handler.codec.LengthFieldPrepender;
-import org.springframework.stereotype.Component;
-
-import java.nio.ByteOrder;
-
-@Component
-@ChannelHandler.Sharable
-@NettyHandler(name = "ExternalDeviceData", order = 2)
-public class ExternalDeviceDataEncoder extends LengthFieldPrepender {
-    public ExternalDeviceDataEncoder() {
-        this(ByteOrder.LITTLE_ENDIAN, 4, 0, false);
+    import com.wyq.netty.annotation.NettyHandler;
+    import io.netty.channel.ChannelHandler;
+    import io.netty.handler.codec.LengthFieldPrepender;
+    import org.springframework.stereotype.Component;
+    
+    import java.nio.ByteOrder;
+    
+    @Component
+    @ChannelHandler.Sharable
+    @NettyHandler(name = "ExternalDeviceData", order = 2)
+    public class ExternalDeviceDataEncoder extends LengthFieldPrepender {
+        public ExternalDeviceDataEncoder() {
+            this(ByteOrder.LITTLE_ENDIAN, 4, 0, false);
+        }
+    
+        public ExternalDeviceDataEncoder(ByteOrder byteOrder, int lengthFieldLength, int lengthAdjustment, boolean lengthIncludesLengthFieldLength) {
+            super(byteOrder, lengthFieldLength, lengthAdjustment, lengthIncludesLengthFieldLength);
+        }
     }
-
-    public ExternalDeviceDataEncoder(ByteOrder byteOrder, int lengthFieldLength, int lengthAdjustment, boolean lengthIncludesLengthFieldLength) {
-        super(byteOrder, lengthFieldLength, lengthAdjustment, lengthIncludesLengthFieldLength);
-    }
-}
 ```
 
 ## 注意
     注解@NettyHandler中的属性name，代表了一个netty服务。如果编写的多个ChannelHandler是属于一个服务的，那么name就保持一致。
     例如以上代码中的类ExternalDeviceDataHandler、ExternalDeviceDataDecoder和ExternalDeviceDataEncoder，name一致，order不一致。
+    同时@NettyHandler中的name值必须与yml配置中的name值一致
     
     注解@NettyHandler中的属性order，当name一样的ChannelHandler有多个时，通过order的值对ChannelHandler进行排序，该顺序代表了被添加到channelPipeline中的顺序。
     order值越小，排的越靠前。
