@@ -2,9 +2,8 @@
 Netty封装，可通过配置灵活增减netty端口
 # 快速上手
 ## application.yml配置
-例如下面开通了两个个端口
+例如下面开通了两个端口5000和11111
 ```yaml
-//配置了两个端口5000和11111
 netty:
   nio-list:
     - name: ExternalDeviceData
