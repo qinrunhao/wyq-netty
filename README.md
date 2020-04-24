@@ -38,127 +38,126 @@ netty:
     开发者只需要实现抽象方法execute()即可。
 例如：只实现execute方法
 ```java
-    import xxx.service.AbstractChannelHandlerService;
-    import xxx.service.DeviceDataService;
-    import io.netty.channel.ChannelHandlerContext;
-    import lombok.extern.slf4j.Slf4j;
-    import org.springframework.beans.factory.annotation.Autowired;
-    import org.springframework.stereotype.Component;
-    import com.wyq.netty.annotation.NettyHandler;
-    
-    @Slf4j
-    @Component
-    @NettyHandler(name = "ExternalDeviceData", order = 3)
-    public class ExternalDeviceDataHandler extends AbstractChannelHandlerService {
-        @Autowired
-        private DeviceDataService deviceDataService;
-    
-        @Override
-        public void execute(ChannelHandlerContext ctx, String data) {
-            deviceDataService.heatMapAndCountDeviceData(ctx, data);
-        }
+import xxx.service.AbstractChannelHandlerService;
+import xxx.service.DeviceDataService;
+import io.netty.channel.ChannelHandlerContext;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+import com.wyq.netty.annotation.NettyHandler;
+
+@Slf4j
+@Component
+@NettyHandler(name = "ExternalDeviceData", order = 3)
+public class ExternalDeviceDataHandler extends AbstractChannelHandlerService {
+    @Autowired
+    private DeviceDataService deviceDataService;
+
+    @Override
+    public void execute(ChannelHandlerContext ctx, String data) {
+        deviceDataService.heatMapAndCountDeviceData(ctx, data);
     }
+}
 ```
 例如：重写ChannelHandler的方法
 ```java
+import xxx.service.AbstractChannelHandlerService;
+import xxx.service.DeviceDataService;
+import io.netty.channel.ChannelHandlerContext;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+import com.wyq.netty.annotation.NettyHandler;
 
-    import xxx.service.AbstractChannelHandlerService;
-    import xxx.service.DeviceDataService;
-    import io.netty.channel.ChannelHandlerContext;
-    import lombok.extern.slf4j.Slf4j;
-    import org.springframework.beans.factory.annotation.Autowired;
-    import org.springframework.stereotype.Component;
-    import com.wyq.netty.annotation.NettyHandler;
-    
-    import java.util.List;
-    
-    @Slf4j
-    @Component
-    @NettyHandler(name = "IntraDeviceData", order = 1)
-    public class IntraDeviceDataHandler extends AbstractChannelHandlerService {
-    
-        @Autowired
-        private List<ChannelHandlerContext> channelHandlerContextList;
-    
-        @Autowired
-        private DeviceDataService deviceDataService;
-    
-        @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-            cause.printStackTrace();
-            channelHandlerContextList.remove(ctx);
-            ctx.close();
-        }
-    
-        @Override
-        public void channelActive(ChannelHandlerContext ctx) throws Exception {
-            super.channelActive(ctx);
-            log.info("IntraDeviceChannelHandlerAdapter channelActive 连上了:" + ctx.toString());
-            channelHandlerContextList.add(ctx);
-            log.info("TCP连接数：" + channelHandlerContextList.size());
-        }
-    
-        @Override
-        public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-            super.channelInactive(ctx);
-            log.info("IntraDeviceChannelHandlerAdapter channelInactive 断开了:" + ctx.toString());
-            channelHandlerContextList.remove(ctx);
-            ctx.close();
-        }
-    
-        @Override
-        public void execute(ChannelHandlerContext ctx, String data) {
-            if (log.isDebugEnabled()) {
-                log.info("DeviceDataServiceImpl intraDevice 正在处理数据...");
-                log.info("DeviceDataServiceImpl intraDevice data:{}", data);
-            }
-            deviceDataService.intraDevice(ctx, data);
-        }
+import java.util.List;
+
+@Slf4j
+@Component
+@NettyHandler(name = "IntraDeviceData", order = 1)
+public class IntraDeviceDataHandler extends AbstractChannelHandlerService {
+
+    @Autowired
+    private List<ChannelHandlerContext> channelHandlerContextList;
+
+    @Autowired
+    private DeviceDataService deviceDataService;
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        cause.printStackTrace();
+        channelHandlerContextList.remove(ctx);
+        ctx.close();
     }
+
+    @Override
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        super.channelActive(ctx);
+        log.info("IntraDeviceChannelHandlerAdapter channelActive 连上了:" + ctx.toString());
+        channelHandlerContextList.add(ctx);
+        log.info("TCP连接数：" + channelHandlerContextList.size());
+    }
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        super.channelInactive(ctx);
+        log.info("IntraDeviceChannelHandlerAdapter channelInactive 断开了:" + ctx.toString());
+        channelHandlerContextList.remove(ctx);
+        ctx.close();
+    }
+
+    @Override
+    public void execute(ChannelHandlerContext ctx, String data) {
+        if (log.isDebugEnabled()) {
+            log.info("DeviceDataServiceImpl intraDevice 正在处理数据...");
+            log.info("DeviceDataServiceImpl intraDevice data:{}", data);
+        }
+        deviceDataService.intraDevice(ctx, data);
+    }
+}
 ```
 ### 编写netty解码器
 ```java
-    import com.hope.common.constant.annotation.NotProguardClassName;
-    import com.wyq.netty.annotation.NettyHandler;
-    import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
-    import org.springframework.stereotype.Component;
-    
-    import java.nio.ByteOrder;
-    
-    @Component
-    @NettyHandler(name = "ExternalDeviceData", order = 1)
-    public class ExternalDeviceDataDecoder extends LengthFieldBasedFrameDecoder {
-    
-        public ExternalDeviceDataDecoder() {
-            this(ByteOrder.LITTLE_ENDIAN, Integer.MAX_VALUE, 0, 4, 0, 4, true);
-        }
-    
-        public ExternalDeviceDataDecoder(ByteOrder byteOrder, int maxFrameLength, int lengthFieldOffset, int lengthFieldLength, int lengthAdjustment, int initialBytesToStrip, boolean failFast) {
-            super(byteOrder, maxFrameLength, lengthFieldOffset, lengthFieldLength, lengthAdjustment, initialBytesToStrip, failFast);
-        }
+import com.hope.common.constant.annotation.NotProguardClassName;
+import com.wyq.netty.annotation.NettyHandler;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import org.springframework.stereotype.Component;
+
+import java.nio.ByteOrder;
+
+@Component
+@NettyHandler(name = "ExternalDeviceData", order = 1)
+public class ExternalDeviceDataDecoder extends LengthFieldBasedFrameDecoder {
+
+    public ExternalDeviceDataDecoder() {
+        this(ByteOrder.LITTLE_ENDIAN, Integer.MAX_VALUE, 0, 4, 0, 4, true);
     }
+
+    public ExternalDeviceDataDecoder(ByteOrder byteOrder, int maxFrameLength, int lengthFieldOffset, int lengthFieldLength, int lengthAdjustment, int initialBytesToStrip, boolean failFast) {
+        super(byteOrder, maxFrameLength, lengthFieldOffset, lengthFieldLength, lengthAdjustment, initialBytesToStrip, failFast);
+    }
+}
 ```
 ### 编写netty编码器
 ```java
-    import com.wyq.netty.annotation.NettyHandler;
-    import io.netty.channel.ChannelHandler;
-    import io.netty.handler.codec.LengthFieldPrepender;
-    import org.springframework.stereotype.Component;
-    
-    import java.nio.ByteOrder;
-    
-    @Component
-    @ChannelHandler.Sharable
-    @NettyHandler(name = "ExternalDeviceData", order = 2)
-    public class ExternalDeviceDataEncoder extends LengthFieldPrepender {
-        public ExternalDeviceDataEncoder() {
-            this(ByteOrder.LITTLE_ENDIAN, 4, 0, false);
-        }
-    
-        public ExternalDeviceDataEncoder(ByteOrder byteOrder, int lengthFieldLength, int lengthAdjustment, boolean lengthIncludesLengthFieldLength) {
-            super(byteOrder, lengthFieldLength, lengthAdjustment, lengthIncludesLengthFieldLength);
-        }
+import com.wyq.netty.annotation.NettyHandler;
+import io.netty.channel.ChannelHandler;
+import io.netty.handler.codec.LengthFieldPrepender;
+import org.springframework.stereotype.Component;
+
+import java.nio.ByteOrder;
+
+@Component
+@ChannelHandler.Sharable
+@NettyHandler(name = "ExternalDeviceData", order = 2)
+public class ExternalDeviceDataEncoder extends LengthFieldPrepender {
+    public ExternalDeviceDataEncoder() {
+        this(ByteOrder.LITTLE_ENDIAN, 4, 0, false);
     }
+
+    public ExternalDeviceDataEncoder(ByteOrder byteOrder, int lengthFieldLength, int lengthAdjustment, boolean lengthIncludesLengthFieldLength) {
+        super(byteOrder, lengthFieldLength, lengthAdjustment, lengthIncludesLengthFieldLength);
+    }
+}
 ```
 
 ## 注意
