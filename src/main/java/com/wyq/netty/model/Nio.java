@@ -42,11 +42,6 @@ public class Nio implements Serializable {
     private Integer allIdleTimeSeconds = 0;
 
     /**
-     * 处理业务逻辑的java全路径
-     */
-    private String channelHandlerClassName;
-
-    /**
      * Channeloption.SO_KEEPALIVE参数对应于套接字选项中的SO_KEEPALIVE，
      * 该参数用于设置TCP连接，当设置该选项以后，连接会测试链接的状态，
      * 这个选项用于可能长时间没有数据交流的连接。当设置该选项以后，
@@ -66,15 +61,6 @@ public class Nio implements Serializable {
      * 禁用 Nagle 算法，不使用写缓存，直接发送数据
      */
     private Boolean tcpNoDelay = Boolean.TRUE;
-
-    /**
-     * 消息解码器类名
-     */
-    private String decoderAdapterClassName;
-    /**
-     * 消息编码器类名
-     */
-    private String encoderAdapterClassName;
 
     /**
      * 是否使用 Linux native transport,默认使用

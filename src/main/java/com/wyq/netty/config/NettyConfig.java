@@ -11,5 +11,6 @@ import java.util.List;
 @Data
 @Component
 public class NettyConfig {
+    private String scanPackage;
     private List<Nio> nioList;
 }

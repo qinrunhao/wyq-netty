@@ -3,7 +3,8 @@ Netty封装，可通过配置灵活增减netty端口
 # 快速上手
 ## application.yml配置
 例如下面开通了两个个端口
-```
+```yaml
+//配置了两个端口5000和11111
 netty:
   nio-list:
     - name: ExternalDeviceData
@@ -14,9 +15,6 @@ netty:
       writer-idle-time-seconds: 20
       allIdle-time-seconds: 40
       backlog: 100
-      channel-handler-class-name: com.hope.**.ExternalDeviceDataHandler
-      decoder-adapter-class-name: com.hope.**.ExternalDeviceDataDecoder
-      encoder-adapter-class-name: com.hope.**.ExternalDeviceDataEncoder
     - name: IntraDeviceData
       port: 11111
       boss-count: 1
@@ -25,20 +23,30 @@ netty:
       writer-idle-time-seconds: 0
       allIdle-time-seconds: 0
       backlog: 1000000000
-      channel-handler-class-name: com.hope.**.IntraDeviceDataHandler
   ```
-  ## 继承抽象类AbstractChannelHandlerService
-  例1：
+## 编写ChannelHandler
+### 需要在类上加上注解
+  
+    @Component
+    @NettyHandler(name = "ExternalDeviceData", order = 3)
+### 继承ChannelHandler
+  
+    可以继承ChannelInboundHandlerAdapte、ChannelOutboundHandlerAdapter等。
+    如果是要写处理的业务类，可以继承本包中的AbstractChannelHandlerService，该类已经实现了部分功能，
+    开发者只需要实现抽象方法execute()即可。
+例如：只实现execute方法
   ```java
-    import com.hope.common.netty.service.AbstractChannelHandlerService;
-    import com.hope.magic.box.service.DeviceDataService;
+    import xxx.service.AbstractChannelHandlerService;
+    import xxx.service.DeviceDataService;
     import io.netty.channel.ChannelHandlerContext;
     import lombok.extern.slf4j.Slf4j;
     import org.springframework.beans.factory.annotation.Autowired;
     import org.springframework.stereotype.Component;
+    import com.wyq.netty.annotation.NettyHandler;
     
     @Slf4j
     @Component
+    @NettyHandler(name = "ExternalDeviceData", order = 3)
     public class ExternalDeviceDataHandler extends AbstractChannelHandlerService {
         @Autowired
         private DeviceDataService deviceDataService;
@@ -49,20 +57,22 @@ netty:
         }
     }
 ```
-例2：
+例如：重写ChannelHandler的方法
 ```java
 
-    import com.hope.common.netty.service.AbstractChannelHandlerService;
-    import com.hope.magic.box.service.DeviceDataService;
+    import xxx.service.AbstractChannelHandlerService;
+    import xxx.service.DeviceDataService;
     import io.netty.channel.ChannelHandlerContext;
     import lombok.extern.slf4j.Slf4j;
     import org.springframework.beans.factory.annotation.Autowired;
     import org.springframework.stereotype.Component;
+    import com.wyq.netty.annotation.NettyHandler;
     
     import java.util.List;
     
     @Slf4j
     @Component
+    @NettyHandler(name = "IntraDeviceData", order = 1)
     public class IntraDeviceDataHandler extends AbstractChannelHandlerService {
     
         @Autowired
@@ -104,4 +114,56 @@ netty:
         }
     }
 ```
-将业务逻辑重写在抽象类的execute()方法中。
+### 编写netty解码器
+```java
+import com.hope.common.constant.annotation.NotProguardClassName;
+import com.wyq.netty.annotation.NettyHandler;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import org.springframework.stereotype.Component;
+
+import java.nio.ByteOrder;
+
+@Component
+@NettyHandler(name = "ExternalDeviceData", order = 1)
+public class ExternalDeviceDataDecoder extends LengthFieldBasedFrameDecoder {
+
+    public ExternalDeviceDataDecoder() {
+        this(ByteOrder.LITTLE_ENDIAN, Integer.MAX_VALUE, 0, 4, 0, 4, true);
+    }
+
+    public ExternalDeviceDataDecoder(ByteOrder byteOrder, int maxFrameLength, int lengthFieldOffset, int lengthFieldLength, int lengthAdjustment, int initialBytesToStrip, boolean failFast) {
+        super(byteOrder, maxFrameLength, lengthFieldOffset, lengthFieldLength, lengthAdjustment, initialBytesToStrip, failFast);
+    }
+}
+```
+### 编写netty编码器
+```java
+import com.wyq.netty.annotation.NettyHandler;
+import io.netty.channel.ChannelHandler;
+import io.netty.handler.codec.LengthFieldPrepender;
+import org.springframework.stereotype.Component;
+
+import java.nio.ByteOrder;
+
+@Component
+@ChannelHandler.Sharable
+@NettyHandler(name = "ExternalDeviceData", order = 2)
+public class ExternalDeviceDataEncoder extends LengthFieldPrepender {
+    public ExternalDeviceDataEncoder() {
+        this(ByteOrder.LITTLE_ENDIAN, 4, 0, false);
+    }
+
+    public ExternalDeviceDataEncoder(ByteOrder byteOrder, int lengthFieldLength, int lengthAdjustment, boolean lengthIncludesLengthFieldLength) {
+        super(byteOrder, lengthFieldLength, lengthAdjustment, lengthIncludesLengthFieldLength);
+    }
+}
+```
+
+## 注意
+    注解@NettyHandler中的属性name，代表了一个netty服务。如果编写的多个ChannelHandler是属于一个服务的，那么name就保持一致。
+    例如以上代码中的类ExternalDeviceDataHandler、ExternalDeviceDataDecoder和ExternalDeviceDataEncoder，name一致，order不一致。
+    
+    注解@NettyHandler中的属性order，当name一样的ChannelHandler有多个时，通过order的值对ChannelHandler进行排序，该顺序代表了被添加到channelPipeline中的顺序。
+    order值越小，排的越靠前。
+    例如其中ExternalDeviceDataHandler、ExternalDeviceDataDecoder都属于ChannelInboundHandlerAdapter，排序就至关重要了。因为肯定要先解码，所以ExternalDeviceDataDecoder
+    的order值就比较小
