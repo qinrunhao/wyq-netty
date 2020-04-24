@@ -143,7 +143,16 @@ public class TcpServer {
                             }
                         })
                         .peek(handler -> {
-                            channelPipeline.addLast(handler.getClass().getSimpleName(), handler);
+                            if (handler.isSharable()) {
+                                channelPipeline.addLast(handler.getClass().getSimpleName(), handler);
+                            } else {
+                                try {
+                                    channelPipeline.addLast(handler.getClass().getSimpleName(), handler.getClass().newInstance());
+                                } catch (InstantiationException | IllegalAccessException e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                            beansWithNettyHandlerAnnotation.remove(handler);
                             beansWithNettyHandlerAnnotation.remove(handler);
                         })
                         .count();
