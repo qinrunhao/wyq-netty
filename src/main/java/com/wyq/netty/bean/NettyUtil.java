@@ -12,10 +12,6 @@ import java.util.List;
 @Slf4j
 public class NettyUtil {
 
-    public NettyUtil(NettyConfig nettyConfig) {
-        check(nettyConfig);
-    }
-
     public static void check(NettyConfig nettyConfig) throws BeansException {
         if (CollectionUtils.isEmpty(nettyConfig.getNioList())) {
             return;
