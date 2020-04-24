@@ -131,11 +131,11 @@ public class TcpServer {
                 channelPipeline.addLast("idleStateHandler", new IdleStateHandler(config.getReaderIdleTimeSeconds(), config.getWriterIdleTimeSeconds(),
                         config.getAllIdleTimeSeconds()));
                 beansWithNettyHandlerAnnotation.stream()
-                        .filter(handerBean->{
-                                    NettyHandler nettyHandler = AnnotationUtils.findAnnotation(handerBean.getClass(), NettyHandler.class);
-                                    return nettyHandler != null && handerBean instanceof ChannelHandlerAdapter && nettyHandler.name().equals(config.getName());
+                        .filter(handlerBean->{
+                                    NettyHandler nettyHandler = AnnotationUtils.findAnnotation(handlerBean.getClass(), NettyHandler.class);
+                                    return nettyHandler != null && handlerBean instanceof ChannelHandlerAdapter && nettyHandler.name().equals(config.getName());
                                 }
-                        ).map(handerBean -> (ChannelHandlerAdapter) handerBean)
+                        ).map(handlerBean -> (ChannelHandlerAdapter) handlerBean)
                         .sorted(new Comparator<ChannelHandlerAdapter>() {
                             @Override
                             public int compare(ChannelHandlerAdapter o1, ChannelHandlerAdapter o2) {
