@@ -1,8 +1,11 @@
 # wyq-netty
-Netty封装，可通过配置灵活增减netty端口
+    Netty封装，封装了netty服务的创建逻辑，同时可通过配置灵活增减netty服务
+    目前支持TCP连接
 # 快速上手
+## 扫描包
+项目启动时，记得要让Spring扫描到该包，比如在启动类上加上注解@ComponentScan({"com.wyq.netty"})
 ## application.yml配置
-例如下面开通了两个端口5000和11111
+例如下面开通了两个端口5000和11111（配置的具体含义，请查看类Nio）
 ```yaml
 netty:
   nio-list:
