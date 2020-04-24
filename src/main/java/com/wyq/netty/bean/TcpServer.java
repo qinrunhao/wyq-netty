@@ -153,7 +153,6 @@ public class TcpServer {
                                 }
                             }
                             beansWithNettyHandlerAnnotation.remove(handler);
-                            beansWithNettyHandlerAnnotation.remove(handler);
                         })
                         .count();
             }
