@@ -19,10 +19,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.lang.NonNull;
 
-import java.util.Comparator;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.ThreadFactory;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Getter
@@ -44,17 +43,24 @@ public class TcpServer {
     private Class<? extends ServerChannel> channelType;
 
     private ChannelInitializer channelInitializer;
+    /**
+     * boss channel options
+     */
+    private Map<ChannelOption<?>, Object> channelOptions = new HashMap<>();
+    /**
+     * worker channel options
+     */
+    private Map<ChannelOption<?>, Object> childChannelOptions = new HashMap<>();
 
     private ChannelFuture channelFuture;
 
-    private List<Object> beansWithNettyHandlerAnnotation;
+    private LinkedHashMap<String, ChannelHandlerAdapter> channelHandlerAdapterLinkedHashMap;
 
 
     TcpServer(@NonNull Nio config, @NonNull List<Object> beansWithNettyHandlerAnnotation) {
         Objects.requireNonNull(config, "TcpServer instantiate fail with null nio config.");
         this.config = config;
-        this.beansWithNettyHandlerAnnotation = beansWithNettyHandlerAnnotation;
-
+        this.channelHandlerAdapterLinkedHashMap = parseChannelHandler(beansWithNettyHandlerAnnotation);
         try {
             log.info("TcpServer[{}] port[:{}] initializing ...", config.getName(), config.getPort());
             init();
@@ -65,17 +71,47 @@ public class TcpServer {
         }
     }
 
+    private LinkedHashMap<String, ChannelHandlerAdapter> parseChannelHandler(List<Object> beansWithNettyHandlerAnnotation) {
+        List<ChannelHandlerAdapter> channelHandlerAdapterList =
+                beansWithNettyHandlerAnnotation.stream()
+                        .filter(handlerBean -> {
+                            NettyHandler nettyHandler = AnnotationUtils.findAnnotation(handlerBean.getClass(), NettyHandler.class);
+                            return nettyHandler != null && handlerBean instanceof ChannelHandlerAdapter && nettyHandler.name().equals(config.getName());
+                        })
+                        .map(handlerBean -> (ChannelHandlerAdapter)handlerBean )
+                        .sorted(Comparator.comparingInt(o -> AnnotationUtils.findAnnotation(o.getClass(), NettyHandler.class).order()))
+                        .collect(Collectors.toList());
+        LinkedHashMap<String, ChannelHandlerAdapter> channelHandlerAdapterLinkedHashMap = new LinkedHashMap<>();
+        for (ChannelHandlerAdapter handlerAdapter : channelHandlerAdapterList) {
+            String handlerName = handlerAdapter.getClass().getSimpleName();
+            if (handlerName.contains("$$")) {
+                handlerName = handlerName.substring(0, handlerName.indexOf("$$"));
+            }
+            channelHandlerAdapterLinkedHashMap.put(handlerName, handlerAdapter);
+        }
+        beansWithNettyHandlerAnnotation.removeAll(channelHandlerAdapterList);
+        return channelHandlerAdapterLinkedHashMap;
+    }
+
     private void init() {
         bootstrap = new ServerBootstrap();
         initEventLoopGroup();
         initChannelType();
         initChannelInitializer();
+        initChannelOptions();
 
         bootstrap.group(bossEventLoopGroup, workerEventLoopGroup)
                 .channel(channelType)
                 .handler(new LoggingHandler(LogLevel.DEBUG))
                 .childHandler(channelInitializer);
-        setChannelOptions();
+
+        for (ChannelOption opt : channelOptions.keySet()) {
+            bootstrap.option(opt, channelOptions.get(opt));
+        }
+
+        for (ChannelOption childOpt : childChannelOptions.keySet()) {
+            bootstrap.childOption(childOpt, childChannelOptions.get(childOpt));
+        }
         start();
         // register shutdown hook to jvm
         Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown, config.getName() + "-shutdownHook"));
@@ -86,7 +122,7 @@ public class TcpServer {
             log.info("TcpServer[{}] port[:{}] starting ...", config.getName(), config.getPort());
             // wait until the server socket is bind succeed.
             channelFuture = bootstrap.bind(config.getPort()).sync();
-            log.info("TcpServer[{}] port[:{}] start success ...", config.getName(), config.getPort());
+            log.info("TcpServer[{}],start success: [{}] ...", config.getName(), channelFuture.isSuccess());
         } catch (Exception e) {
             log.error("TcpServer[{}] port[:{}] start failed ...", config.getName(), config.getPort(), e);
             throw new RuntimeException(e);
@@ -130,46 +166,33 @@ public class TcpServer {
                 final ChannelPipeline channelPipeline = ch.pipeline();
                 channelPipeline.addLast("idleStateHandler", new IdleStateHandler(config.getReaderIdleTimeSeconds(), config.getWriterIdleTimeSeconds(),
                         config.getAllIdleTimeSeconds()));
-                beansWithNettyHandlerAnnotation.stream()
-                        .filter(handlerBean->{
-                                    NettyHandler nettyHandler = AnnotationUtils.findAnnotation(handlerBean.getClass(), NettyHandler.class);
-                                    return nettyHandler != null && handlerBean instanceof ChannelHandlerAdapter && nettyHandler.name().equals(config.getName());
-                                }
-                        ).map(handlerBean -> (ChannelHandlerAdapter) handlerBean)
-                        .sorted(new Comparator<ChannelHandlerAdapter>() {
-                            @Override
-                            public int compare(ChannelHandlerAdapter o1, ChannelHandlerAdapter o2) {
-                                return AnnotationUtils.findAnnotation(o1.getClass(), NettyHandler.class).order() - AnnotationUtils.findAnnotation(o1.getClass(), NettyHandler.class).order();
-                            }
-                        })
-                        .peek(handler -> {
-                            if (handler.isSharable()) {
-                                channelPipeline.addLast(handler.getClass().getSimpleName(), handler);
-                            } else {
-                                try {
-                                    channelPipeline.addLast(handler.getClass().getSimpleName(), handler.getClass().newInstance());
-                                } catch (InstantiationException | IllegalAccessException e) {
-                                    e.printStackTrace();
-                                }
-                            }
-                            beansWithNettyHandlerAnnotation.remove(handler);
-                        })
-                        .count();
+                channelHandlerAdapterLinkedHashMap.keySet().forEach(handlerName -> {
+                    ChannelHandlerAdapter handler = channelHandlerAdapterLinkedHashMap.get(handlerName);
+                    if (handler.isSharable()) {
+                        channelPipeline.addLast(handlerName, handler);
+                    } else {
+                        try {
+                            channelPipeline.addLast(handlerName, handler.getClass().newInstance());
+                        } catch (InstantiationException | IllegalAccessException e) {
+                            e.printStackTrace();
+                        }
+
+                    }
+                });
             }
         };
     }
 
-    private void setChannelOptions() {
-        bootstrap.option(ChannelOption.SO_BACKLOG, config.getBacklog());
+    private void initChannelOptions() {
+        channelOptions.put(ChannelOption.SO_BACKLOG, config.getBacklog());
+        childChannelOptions.put(ChannelOption.SO_KEEPALIVE, config.getKeepAlive());
+        childChannelOptions.put(ChannelOption.TCP_NODELAY, config.getTcpNoDelay());
         //使用池化ByteBuf内存分配器
-        bootstrap.option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
-        bootstrap.childOption(ChannelOption.SO_KEEPALIVE, config.getKeepAlive());
-        bootstrap.childOption(ChannelOption.TCP_NODELAY, config.getTcpNoDelay());
-        //使用池化ByteBuf内存分配器
-        bootstrap.childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
+        channelOptions.put(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
+        childChannelOptions.put(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
         if (useNative()) {
-            bootstrap.option(EpollChannelOption.EPOLL_MODE, EpollMode.EDGE_TRIGGERED);
-            bootstrap.childOption(EpollChannelOption.EPOLL_MODE, EpollMode.EDGE_TRIGGERED);
+            channelOptions.put(EpollChannelOption.EPOLL_MODE, EpollMode.EDGE_TRIGGERED);
+            childChannelOptions.put(EpollChannelOption.EPOLL_MODE, EpollMode.EDGE_TRIGGERED);
         }
     }
 
